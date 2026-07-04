@@ -1,0 +1,22 @@
+# Build output
+/bagworm
+/dist/
+*.exe
+
+# Test / coverage artifacts
+coverage.out
+*.test
+
+# Node dev tooling (lefthook / commitlint / git-cliff)
+node_modules/
+
+# Packaging artifacts
+*.pkg.tar.zst
+*.tar.gz
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+.file/

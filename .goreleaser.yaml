@@ -1,0 +1,72 @@
+version: 2
+
+project_name: bagworm
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: bagworm
+    main: ./cmd/bagworm
+    binary: bagworm
+    # Fully static, zero-cgo: bagworm shells out to the runtime CLI, so the
+    # binary itself has no native dependencies at all.
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - bagworm.example.yaml
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+nfpms:
+  - id: packages
+    package_name: bagworm
+    maintainer: Smiduweorc
+    description: The opinionated developer UX for OCI containers.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+
+source:
+  enabled: true
+
+release:
+  github:
+    owner: Smiduweorc
+    name: bagworm
+  draft: false
+  prerelease: auto
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

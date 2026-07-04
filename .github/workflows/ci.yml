@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+    branches: [master, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # darwin is a release target (see .goreleaser.yaml), so the hermetic
+        # unit tests run there too. Integration tests are Linux-only below.
+        os: [ubuntu-latest, macos-latest]
+        go: ['1.25', '1.26']
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Verify gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Test (race + coverage)
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Build all release platforms (static, zero-cgo)
+        if: runner.os == 'Linux'
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os=${target%/*}; arch=${target#*/}
+            echo "Building $os/$arch"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -o /dev/null ./cmd/bagworm
+          done
+
+  integration:
+    name: Integration (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # nerdctl is missing on purpose: runner images ship no rootless
+        # containerd, and rootful nerdctl would need sudo, which bagworm
+        # never uses. Revisit if the runner images grow rootless containerd.
+        runtime: [podman, docker]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Force ${{ matrix.runtime }} to win detection
+        if: matrix.runtime == 'docker'
+        # Detection order is fixed (podman -> docker -> nerdctl) with no
+        # override, so exercising docker means podman has to disappear.
+        run: sudo rm -f "$(command -v podman)"
+
+      - name: Check the runtime is usable
+        run: ${{ matrix.runtime }} info
+
+      - name: Confirm detection picks ${{ matrix.runtime }}
+        run: |
+          go build -o /tmp/bagworm ./cmd/bagworm
+          proj=$(mktemp -d)
+          echo 'image: alpine:3' > "$proj/bagworm.yaml"
+          cd "$proj"
+          first=$(/tmp/bagworm enter --dry-run | head -n1)
+          echo "detected: $first"
+          [ "${first%% *}" = "${{ matrix.runtime }}" ]
+
+      - name: Integration tests
+        run: go test -v -tags integration ./internal/enter/
+
+  release-check:
+    name: GoReleaser config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: latest
+          args: check
+
+  govulncheck:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck ./...

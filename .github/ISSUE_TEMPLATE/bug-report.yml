@@ -1,0 +1,65 @@
+name: Bug report
+description: Something bagworm does is wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, and what did bagworm do?
+      placeholder: |
+        $ bagworm enter
+        ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: dry-run
+    attributes:
+      label: Output of `bagworm enter --dry-run`
+      description: >-
+        Run it in the same directory and paste the output. It prints the
+        exact runtime command and never starts a container, so it is safe
+        to run anywhere.
+      render: sh
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Your bagworm.yaml
+      render: yaml
+
+  - type: input
+    id: version
+    attributes:
+      label: bagworm version
+      description: Output of `bagworm --version`.
+    validations:
+      required: true
+
+  - type: input
+    id: runtime
+    attributes:
+      label: Container runtime
+      description: >-
+        Which runtime bagworm picked (the first line of the dry-run output
+        names it), its version, and whether it runs rootless or rootful.
+      placeholder: podman 5.2.3, rootless
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Host OS
+      description: Distro and, if you know it, the SELinux mode (`getenforce`).
+      placeholder: Fedora 42, SELinux enforcing
+    validations:
+      required: true
