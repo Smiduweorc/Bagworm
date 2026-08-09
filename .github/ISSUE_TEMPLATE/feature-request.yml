@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose something bagworm should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Bagworm only grows features that remove a daily developer annoyance.
+        "Docker can do X" is not a reason for bagworm to do X, so the
+        strongest proposals describe the annoyance first and the feature
+        second.
+
+  - type: textarea
+    id: annoyance
+    attributes:
+      label: The daily annoyance
+      description: >-
+        What do you do today, how often does it bite you, and what does the
+        workaround look like?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What bagworm could do about it
+      description: >-
+        Sketch the behavior. If it needs config, show the bagworm.yaml
+        you'd want to write.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ground-rules
+    attributes:
+      label: Ground rules
+      description: >-
+        The "What Bagworm will never do" section of the README is
+        load-bearing, not decoration.
+      options:
+        - label: This is not a request to pass raw flags through to the runtime
+          required: true
+        - label: This is not a request to build images
+          required: true

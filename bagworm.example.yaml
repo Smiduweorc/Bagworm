@@ -1,0 +1,21 @@
+# bagworm.yaml - the complete v0.1 schema. Only `image` is required;
+# everything shown here with a value is the default you get for free.
+#
+# Copy this next to your project root and run `bagworm enter`.
+
+# The OCI image to inhabit. Required.
+image: node:22
+
+# Bind mounts, "src:dst". Sources may be relative (resolved against the
+# directory containing this file), absolute, or ~-prefixed. Destinations
+# must be absolute container paths.
+mounts:
+  - .:/workspace
+
+# Working directory inside the container. Must be absolute.
+workdir: /workspace
+
+# What to run. Omit it (recommended) and bagworm autodetects a shell:
+# bash if the image has it, sh otherwise.
+command:
+  - bash
