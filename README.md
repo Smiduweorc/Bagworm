@@ -142,20 +142,45 @@ command, shell-quoted, one argument per line.
 
 ## Install
 
+### Arch Linux (AUR)
+
+Bagworm is packaged on the AUR as [`bagworm`](https://aur.archlinux.org/packages/bagworm),
+built from source against the tagged release. With an AUR helper:
+
+```sh
+$ yay -S bagworm      # or: paru -S bagworm
+```
+
+Or manually, with `makepkg`:
+
+```sh
+$ git clone https://aur.archlinux.org/bagworm.git
+$ cd bagworm
+$ makepkg -si
+```
+
+Either route installs the binary to `/usr/bin/bagworm` plus shell completions
+for bash, zsh, and fish, and drops the annotated config at
+`/usr/share/doc/bagworm/bagworm.example.yaml`. The container runtimes are
+`optdepends`, so pacman won't pull one in for you - see below.
+
+To build the package straight from this repo instead of the AUR, run
+`makepkg -si` in the repo root; the [`PKGBUILD`](./PKGBUILD) here is the same
+one that's published.
+
+### Other platforms
+
 From source (Go 1.25+):
 
 ```sh
-go install github.com/Smiduweorc/bagworm/cmd/bagworm@latest
+$ go install github.com/Smiduweorc/bagworm/cmd/bagworm@latest
 ```
 
 From a release binary:
 
 ```sh
-curl -sSfL https://raw.githubusercontent.com/Smiduweorc/bagworm/master/install.sh | sh
+$ curl -sSfL https://raw.githubusercontent.com/Smiduweorc/bagworm/master/install.sh | sh
 ```
-
-Arch Linux: build with the included [`PKGBUILD`](./PKGBUILD)
-(`makepkg -si`).
 
 You'll also need at least one of podman, docker, or nerdctl.
 
