@@ -19,7 +19,7 @@ jobs:
         # darwin is a release target (see .goreleaser.yaml), so the hermetic
         # unit tests run there too. Integration tests are Linux-only below.
         os: [ubuntu-latest, macos-latest]
-        go: ['1.25', '1.26']
+        go: ['1.26', '1.27']
     steps:
       - uses: actions/checkout@v7
 
@@ -72,7 +72,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.27'
           cache: true
 
       - name: Force ${{ matrix.runtime }} to win detection
@@ -106,7 +106,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.27'
           cache: true
       - uses: goreleaser/goreleaser-action@v7
         with:
@@ -120,7 +120,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version: '1.27'
           cache: true
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
