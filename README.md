@@ -45,6 +45,11 @@ workdir: /workspace     # default: /workspace
 
 command:                # default: autodetect - bash if the image has it, sh otherwise
   - bash
+
+identity:               # default: none - host credentials to mount read-only
+  - git                 # ~/.gitconfig
+  - ssh                 # ~/.ssh
+  - gh                  # ~/.config/gh (GitHub CLI tokens)
 ```
 
 The project root is wherever `bagworm.yaml` lives (found git-style, walking
@@ -52,7 +57,35 @@ upward), so `bagworm enter` works from any subdirectory. A typo in the config
 is a hard error that names the offending key and line number, rather than a
 silent no-op.
 
-See [`bagworm.example.yaml`](./bagworm.example.yaml) for the annotated version.
+### Trust
+
+Because the config is found by walking upward, the one that applies may not
+be yours: a cloned repo, a shared parent directory, `/tmp`. It chooses the
+image, the command, and what gets mounted, so `bagworm enter` only runs a
+config you have approved:
+
+- The first time (and after **any** change to the file, e.g. one a
+  `git pull` brought in), `bagworm enter` shows the config and asks
+  `Trust it and enter? [y/N]` on your terminal.
+- Without a terminal (CI), it refuses and tells you to run `bagworm trust`,
+  which approves the config as it is now. `bagworm untrust` withdraws that.
+- `bagworm enter --dry-run` works on an untrusted config, so you can see
+  exactly what it would run before approving it.
+- A config owned by another user, or writable by group or others, is
+  refused outright: it could change after you approved it.
+
+Approvals live in `~/.config/bagworm/trusted.json` (or
+`$XDG_CONFIG_HOME/bagworm/`), keyed by path and a SHA-256 of the contents.
+
+### Identity
+
+Your git, ssh, and GitHub CLI credentials are **not** mounted unless the
+config lists them under `identity`. They are mounted read-only and only if
+they exist on the host, but read-only still means readable: anything running
+in the image can use your ssh keys or `gh` token. Ask only for what the
+project needs, and `bagworm enter --no-identity` drops them all for one run
+whatever the config says.
+(./bagworm.example.yaml) for the annotated version.
 
 ## Everyday use
 
@@ -108,8 +141,11 @@ there is nothing to configure:
 
 ```yaml
 # .github/workflows/test.yml, the relevant step
-- run: bagworm enter <<< 'make test'
+- run: bagworm trust && bagworm enter <<< 'make test'
 ```
+
+(`bagworm trust` there approves the config in the checkout being tested -
+your own repo, on a throwaway runner.)
 
 ## What Bagworm does for you
 
@@ -118,8 +154,11 @@ there is nothing to configure:
 - **User mapping** - rootless podman gets `--userns=keep-id`; docker/nerdctl
   get `--user <uid>:<gid>` with a writable `HOME`. Either way, files land
   owned by you.
-- **Identity mounts** - `~/.gitconfig`, `~/.ssh`, and `~/.config/gh` are
-  mounted read-only into the container, each only if it exists on your host.
+- **Identity mounts** - `~/.gitconfig`, `~/.ssh`, and `~/.config/gh`,
+  each only when the config opts in with `identity:` and it exists on your
+  host, mounted read-only.
+- **Trust** - a config runs only once you've approved it, and again after
+  every change to it (see [Trust](#trust)).
 - **TTY handling** - `-t` only when stdout is a terminal, so
   `bagworm enter <<< 'make test'` and CI pipelines just work.
 - **SELinux** - detected automatically; workspace mounts get `:z` on
