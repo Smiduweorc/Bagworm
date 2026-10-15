@@ -52,11 +52,22 @@ func project(t *testing.T, yaml string) string {
 	return dir
 }
 
-// enter runs `bagworm enter` in dir with stdin piped (no TTY, so no -t).
+// enter approves dir's config in a throwaway trust store, then runs
+// `bagworm enter` in dir with stdin piped (no TTY, so no -t).
 func enter(t *testing.T, bin, dir, stdin string) (stdout string, exitCode int) {
 	t.Helper()
+	env := append(os.Environ(), "XDG_CONFIG_HOME="+t.TempDir())
+
+	trust := exec.Command(bin, "trust")
+	trust.Dir = dir
+	trust.Env = env
+	if out, err := trust.CombinedOutput(); err != nil {
+		t.Fatalf("bagworm trust: %v\n%s", err, out)
+	}
+
 	cmd := exec.Command(bin, "enter")
 	cmd.Dir = dir
+	cmd.Env = env
 	cmd.Stdin = strings.NewReader(stdin)
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
@@ -119,6 +130,25 @@ func TestShellFallback(t *testing.T) {
 			t.Errorf("output = %q, want a non-empty BASH_VERSION", out)
 		}
 	})
+}
+
+func TestUntrustedConfigRefused(t *testing.T) {
+	bin := buildBinary(t)
+	dir := project(t, "image: alpine:3\n")
+
+	cmd := exec.Command(bin, "enter")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+t.TempDir())
+	cmd.Stdin = strings.NewReader("exit 0\n")
+	// Detach from any terminal so there is no one to ask.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("untrusted config ran:\n%s", out)
+	}
+	if !strings.Contains(string(out), "bagworm trust") {
+		t.Errorf("refusal does not say how to approve:\n%s", out)
+	}
 }
 
 func TestFileOwnershipRoundTrip(t *testing.T) {

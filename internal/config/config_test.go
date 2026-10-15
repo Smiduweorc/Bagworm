@@ -190,3 +190,35 @@ func TestLoadExplicitEmptyMounts(t *testing.T) {
 		t.Errorf("explicit empty mounts should stay empty, got %v", cfg.Mounts)
 	}
 }
+
+func TestLoadIdentity(t *testing.T) {
+	root := t.TempDir()
+
+	// Nothing is mounted unless asked for: these hold keys and tokens.
+	cfg, err := Load(write(t, root, "a/bagworm.yaml", "image: a\n"), "/home/u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Identity) != 0 {
+		t.Errorf("default Identity = %v, want none", cfg.Identity)
+	}
+
+	cfg, err = Load(write(t, root, "b/bagworm.yaml", "image: a\nidentity: [git, ssh, gh, ssh]\n"), "/home/u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Identity{IdentityGit, IdentitySSH, IdentityGH}
+	if len(cfg.Identity) != len(want) {
+		t.Fatalf("Identity = %v, want %v (deduplicated)", cfg.Identity, want)
+	}
+	for i := range want {
+		if cfg.Identity[i] != want[i] {
+			t.Errorf("Identity = %v, want %v", cfg.Identity, want)
+		}
+	}
+
+	_, err = Load(write(t, root, "c/bagworm.yaml", "image: a\nidentity: [aws]\n"), "/home/u")
+	if err == nil || !strings.Contains(err.Error(), `unknown entry "aws"`) {
+		t.Errorf("err = %v, want an unknown-identity error", err)
+	}
+}
