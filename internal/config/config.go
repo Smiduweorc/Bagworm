@@ -6,6 +6,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -32,21 +33,43 @@ type Mount struct {
 	Dest   string // absolute container path
 }
 
+// Identity names a set of host credentials that can be mounted read-only
+// into the container. Each is opt-in: they hold keys and tokens, and the
+// image and command come from a config file that may not be yours.
+type Identity string
+
+// The identities a config may ask for, and the paths under $HOME each one
+// mounts.
+const (
+	IdentityGit Identity = "git" // ~/.gitconfig
+	IdentitySSH Identity = "ssh" // ~/.ssh
+	IdentityGH  Identity = "gh"  // ~/.config/gh (GitHub CLI tokens)
+)
+
+// IdentityPaths maps each identity to its path relative to $HOME.
+var IdentityPaths = map[Identity]string{
+	IdentityGit: ".gitconfig",
+	IdentitySSH: ".ssh",
+	IdentityGH:  filepath.Join(".config", "gh"),
+}
+
 // Config is the validated, resolved form of bagworm.yaml.
 type Config struct {
-	Image   string
-	Mounts  []Mount
-	Workdir string
-	Command []string // empty means "autodetect a shell at launch"
+	Image    string
+	Mounts   []Mount
+	Workdir  string
+	Command  []string   // empty means "autodetect a shell at launch"
+	Identity []Identity // host credentials to mount; none by default
 }
 
 // raw mirrors the YAML schema exactly. Decoding is strict, so any field
 // not listed here is a hard error.
 type raw struct {
-	Image   string   `yaml:"image"`
-	Mounts  []string `yaml:"mounts"`
-	Workdir string   `yaml:"workdir"`
-	Command []string `yaml:"command"`
+	Image    string   `yaml:"image"`
+	Mounts   []string `yaml:"mounts"`
+	Workdir  string   `yaml:"workdir"`
+	Command  []string `yaml:"command"`
+	Identity []string `yaml:"identity"`
 }
 
 // Find walks upward from startDir to the filesystem root looking for
@@ -76,14 +99,19 @@ func Find(startDir string) (string, error) {
 // Load parses and validates the config at path. home is the host home
 // directory, used to expand ~ in mount sources.
 func Load(path, home string) (Config, error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("reading %s: %w", path, err)
 	}
-	defer f.Close()
+	return Parse(path, data, home)
+}
 
+// Parse validates config contents already read from path. Callers that check
+// the bytes first (for trust) parse those same bytes, so the file cannot
+// change between the check and the use.
+func Parse(path string, data []byte, home string) (Config, error) {
 	var r raw
-	dec := yaml.NewDecoder(f)
+	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&r); err != nil {
 		return Config{}, fmt.Errorf("parsing %s: %s", path, friendlyYAMLError(err))
@@ -105,6 +133,18 @@ func Load(path, home string) (Config, error) {
 	}
 	if !strings.HasPrefix(cfg.Workdir, "/") {
 		return Config{}, fmt.Errorf("%s: \"workdir\" must be an absolute path, got %q", path, cfg.Workdir)
+	}
+
+	seen := make(map[Identity]bool)
+	for _, name := range r.Identity {
+		id := Identity(name)
+		if _, ok := IdentityPaths[id]; !ok {
+			return Config{}, fmt.Errorf("%s: \"identity\": unknown entry %q (valid: git, ssh, gh)", path, name)
+		}
+		if !seen[id] {
+			seen[id] = true
+			cfg.Identity = append(cfg.Identity, id)
+		}
 	}
 
 	rawMounts := r.Mounts
@@ -169,7 +209,7 @@ func friendlyYAMLError(err error) string {
 	msgs := make([]string, 0, len(typeErr.Errors))
 	for _, e := range typeErr.Errors {
 		if m := unknownField.FindStringSubmatch(e); m != nil {
-			msgs = append(msgs, fmt.Sprintf("line %s: unknown field %q (valid fields: image, mounts, workdir, command)", m[1], m[2]))
+			msgs = append(msgs, fmt.Sprintf("line %s: unknown field %q (valid fields: image, mounts, workdir, command, identity)", m[1], m[2]))
 		} else {
 			msgs = append(msgs, e)
 		}
