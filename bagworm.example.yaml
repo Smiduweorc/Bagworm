@@ -19,3 +19,13 @@ workdir: /workspace
 # bash if the image has it, sh otherwise.
 command:
   - bash
+
+# Host credentials to mount read-only. Default: none. Anything in the image
+# can read what you list here, so ask only for what the project needs.
+#   git -> ~/.gitconfig
+#   ssh -> ~/.ssh
+#   gh  -> ~/.config/gh (GitHub CLI tokens)
+# `bagworm enter --no-identity` skips all of them for one run.
+# (Commented out because it is not a default.)
+# identity:
+#   - git
