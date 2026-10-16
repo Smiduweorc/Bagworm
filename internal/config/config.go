@@ -127,6 +127,13 @@ func Parse(path string, data []byte, home string) (Config, error) {
 	if strings.TrimSpace(cfg.Image) == "" {
 		return Config{}, fmt.Errorf("%s: \"image\" is required and must not be empty", path)
 	}
+	// The image is the one config value placed on the runtime command line
+	// where a flag would be parsed: "--privileged" here would become a
+	// `run` option. Workdir and mount destinations are already pinned to
+	// "/", mount sources are made absolute, and command follows the image.
+	if strings.HasPrefix(strings.TrimSpace(cfg.Image), "-") {
+		return Config{}, fmt.Errorf("%s: \"image\" must not start with \"-\", got %q", path, cfg.Image)
+	}
 
 	if cfg.Workdir == "" {
 		cfg.Workdir = "/workspace"
