@@ -146,6 +146,8 @@ func TestLoadErrors(t *testing.T) {
 	}{
 		{"missing image", "mounts: ['.:/w']\n", `"image" is required`},
 		{"empty image", "image: \"\"\n", `"image" is required`},
+		{"flag-shaped image", "image: --privileged\n", `"image" must not start with "-", got "--privileged"`},
+		{"padded flag-shaped image", "image: ' -v=/:/host'\n", `"image" must not start with "-"`},
 		{"unknown field", "image: x\nimagee: y\n", `unknown field "imagee"`},
 		{"unknown field line number", "image: x\nbogus: y\n", "line 2"},
 		{"relative workdir", "image: x\nworkdir: rel\n", `"workdir" must be an absolute path`},
