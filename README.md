@@ -2,195 +2,20 @@
 
 # bagworm
 
-```sh
-$ bagworm enter
-```
-
-Just create a simple `bagworm.yml` file and run your project. This utility skips the need to configure a workspace if you just need a temporary shell.
-
-## Quick start
-
-1. Drop a `bagworm.yaml` in your project root. Only `image` is required:
-
-   ```yaml
-   # bagworm.yaml
-   image: node:22
-   ```
-
-2. Enter, from anywhere in the project:
-
-   ```sh
-   $ cd deep/inside/your/project
-   $ bagworm enter
-   node@workspace:/workspace$ 
-   ```
-
-Files you create inside are owned by you on the host. Exit the shell and the
-container is gone (`--rm` always - state lives in the mounts, not the
-container).
-
-## Configuration
-
-The complete v0.1 schema - this is all of it, and that's the point:
-
-```yaml
-# bagworm.yaml
-image: node:22          # required: the OCI image to inhabit
-
-mounts:                 # default: [".:/workspace"]
-  - .:/workspace        # relative sources resolve against the project root
-  - ~/data:/data        # ~ expands to your home; destinations must be absolute
-
-workdir: /workspace     # default: /workspace
-
-command:                # default: autodetect - bash if the image has it, sh otherwise
-  - bash
-
-identity:               # default: none - host credentials to mount read-only
-  - git                 # ~/.gitconfig
-  - ssh                 # ~/.ssh
-  - gh                  # ~/.config/gh (GitHub CLI tokens)
-```
-
-The project root is wherever `bagworm.yaml` lives (found git-style, walking
-upward), so `bagworm enter` works from any subdirectory. A typo in the config
-is a hard error that names the offending key and line number, rather than a
-silent no-op.
-
-### Trust
-
-Because the config is found by walking upward, the one that applies may not
-be yours: a cloned repo, a shared parent directory, `/tmp`. It chooses the
-image, the command, and what gets mounted, so `bagworm enter` only runs a
-config you have approved:
-
-- The first time (and after **any** change to the file, e.g. one a
-  `git pull` brought in), `bagworm enter` shows the config and asks
-  `Trust it and enter? [y/N]` on your terminal.
-- Without a terminal (CI), it refuses and tells you to run `bagworm trust`,
-  which approves the config as it is now. `bagworm untrust` withdraws that.
-- `bagworm enter --dry-run` works on an untrusted config, so you can see
-  exactly what it would run before approving it.
-- A config owned by another user, or writable by group or others, is
-  refused outright: it could change after you approved it.
-
-Approvals live in `~/.config/bagworm/trusted.json` (or
-`$XDG_CONFIG_HOME/bagworm/`), keyed by path and a SHA-256 of the contents.
-
-### Identity
-
-Your git, ssh, and GitHub CLI credentials are **not** mounted unless the
-config lists them under `identity`. They are mounted read-only and only if
-they exist on the host, but read-only still means readable: anything running
-in the image can use your ssh keys or `gh` token. Ask only for what the
-project needs, and `bagworm enter --no-identity` drops them all for one run
-whatever the config says.
-(./bagworm.example.yaml) for the annotated version.
-
-## Everyday use
-
-Everything below is still just `bagworm enter`. The container shell reads
-stdin, so anything you can type interactively you can also pipe in.
-
-A working session - build inside, own the results outside:
-
-```sh
-$ bagworm enter
-node@workspace:/workspace$ node --version
-v22.17.0
-node@workspace:/workspace$ npm run build
-node@workspace:/workspace$ exit
-$ ls -l dist/app.js
--rw-r--r-- 1 you you 48210 Jul  4 14:12 dist/app.js
-```
-
-The artifact belongs to you on the host, because you were you inside the
-container.
-
-A one-off command - pipe it in, and the container is gone when it finishes:
-
-```sh
-$ bagworm enter <<< 'npm test'
-```
-
-Several commands work the same way with a heredoc:
-
-```sh
-$ bagworm enter <<'EOF'
-npm ci
-npm run build
-npm test
-EOF
-```
-
-A toolchain you never installed. Given this `bagworm.yaml`:
-
-```yaml
-image: golang:1.25
-```
-
-you can hack on a Go project on a machine that has no Go at all:
-
-```sh
-$ bagworm enter <<< 'go test ./...'
-ok      example.com/yourproject/internal/thing   0.31s
-```
-
-CI is the same line. Bagworm only adds `-t` when stdout is a terminal, so
-there is nothing to configure:
-
-```yaml
-# .github/workflows/test.yml, the relevant step
-- run: bagworm trust && bagworm enter <<< 'make test'
-```
-
-(`bagworm trust` there approves the config in the checkout being tested -
-your own repo, on a throwaway runner.)
-
-## What Bagworm does for you
-
-- **Runtime detection** - podman -> docker -> nerdctl, first one installed
-  wins. Nothing in the config, CLI, or docs requires you to know which.
-- **User mapping** - rootless podman gets `--userns=keep-id`; docker/nerdctl
-  get `--user <uid>:<gid>` with a writable `HOME`. Either way, files land
-  owned by you.
-- **Identity mounts** - `~/.gitconfig`, `~/.ssh`, and `~/.config/gh`,
-  each only when the config opts in with `identity:` and it exists on your
-  host, mounted read-only.
-- **Trust** - a config runs only once you've approved it, and again after
-  every change to it (see [Trust](#trust)).
-- **TTY handling** - `-t` only when stdout is a terminal, so
-  `bagworm enter <<< 'make test'` and CI pipelines just work.
-- **SELinux** - detected automatically; workspace mounts get `:z` on
-  enforcing hosts (identity mounts are never relabeled - you get a warning
-  instead).
-- **Clean handoff** - bagworm `exec`s into the runtime and ceases to exist,
-  so signals, TTY resize, and exit codes come straight from the runtime.
-
-Curious what it would run? `bagworm enter --dry-run` prints the exact
-command, shell-quoted, one argument per line.
-
-## What Bagworm will never do
-
-1. **Expose raw runtime flags.** The moment `--docker-args` exists, Bagworm
-   is just another wrapper, so it will never have that escape hatch.
-2. **Build images.** Bagworm inhabits, it does not construct.
-3. **Grow features that don't remove a daily annoyance.** "Docker can do X"
-   is not a reason for Bagworm to do X. The config schema *is* the feature
-   set.
+Put a `bagworm.yaml` in your project and run `bagworm enter`. You get a
+shell in the image you named, with the project mounted at `/workspace` and
+files owned by you on the host.
 
 ## Install
 
 ### Arch Linux (AUR)
 
-Bagworm is packaged on the AUR as [`bagworm`](https://aur.archlinux.org/packages/bagworm),
-built from source against the tagged release. With an AUR helper:
-
 ```sh
 $ yay -S bagworm      # or: paru -S bagworm
 ```
 
-Or manually, with `makepkg`:
+Or with `makepkg`, from the [AUR](https://aur.archlinux.org/packages/bagworm)
+or from this repo's [`PKGBUILD`](./PKGBUILD), which is the published one:
 
 ```sh
 $ git clone https://aur.archlinux.org/bagworm.git
@@ -198,18 +23,13 @@ $ cd bagworm
 $ makepkg -si
 ```
 
-Either route installs the binary to `/usr/bin/bagworm` plus shell completions
-for bash, zsh, and fish, and drops the annotated config at
-`/usr/share/doc/bagworm/bagworm.example.yaml`. The container runtimes are
-`optdepends`, so pacman won't pull one in for you - see below.
-
-To build the package straight from this repo instead of the AUR, run
-`makepkg -si` in the repo root; the [`PKGBUILD`](./PKGBUILD) here is the same
-one that's published.
+The package installs `/usr/bin/bagworm`, completions for bash, zsh and fish,
+and the annotated config at `/usr/share/doc/bagworm/bagworm.example.yaml`.
+The container runtimes are `optdepends`, so install one yourself.
 
 ### Other platforms
 
-From source (Go 1.25+):
+From source (Go 1.26+):
 
 ```sh
 $ go install github.com/Smiduweorc/bagworm/cmd/bagworm@latest
@@ -221,32 +41,156 @@ From a release binary:
 $ curl -sSfL https://raw.githubusercontent.com/Smiduweorc/bagworm/master/install.sh | sh
 ```
 
-You'll also need at least one of podman, docker, or nerdctl.
+You need podman, docker or nerdctl.
+
+## Quick start
+
+Only `image` is required:
+
+```yaml
+# bagworm.yaml
+image: node:22
+```
+
+Enter from anywhere in the project:
+
+```sh
+$ cd deep/inside/your/project
+$ bagworm enter
+node@workspace:/workspace$ 
+```
+
+Exit the shell and the container is gone. It always runs with `--rm`; state
+lives in the mounts.
+
+## Configuration
+
+This is the whole schema:
+
+```yaml
+# bagworm.yaml
+image: node:22          # required
+
+mounts:                 # default: [".:/workspace"]
+  - .:/workspace        # relative sources resolve against the project root
+  - ~/data:/data        # ~ expands to your home; destinations must be absolute
+
+workdir: /workspace     # default: /workspace
+
+command:                # default: bash if the image has it, sh otherwise
+  - bash
+
+identity:               # default: none; host credentials to mount read-only
+  - git                 # ~/.gitconfig
+  - ssh                 # ~/.ssh
+  - gh                  # ~/.config/gh (GitHub CLI tokens)
+```
+
+[`bagworm.example.yaml`](./bagworm.example.yaml) is the annotated version.
+
+The project root is wherever `bagworm.yaml` is, found by walking upward like
+git, so `bagworm enter` works from any subdirectory. An unknown key is an
+error that names the key and line number.
+
+### Trust
+
+Because the config is found by walking upward, the one that applies may not
+be yours: a cloned repo, a shared parent directory, `/tmp`. It picks the
+image, the command and the mounts, so `bagworm enter` only runs a config you
+have approved:
+
+- The first time, and after any change to the file (one a `git pull`
+  brought in, say), it shows the config and asks `Trust it and enter? [y/N]`.
+- Without a terminal (CI) it refuses and tells you to run `bagworm trust`,
+  which approves the config as it is now. `bagworm untrust` withdraws that.
+- `bagworm enter --dry-run` works on an untrusted config and prints the
+  exact runtime command, one argument per line.
+- A config owned by another user, or writable by group or others, is
+  refused, since it could change after you approved it.
+
+Approvals live in `~/.config/bagworm/trusted.json` (or
+`$XDG_CONFIG_HOME/bagworm/`), keyed by path and the SHA-256 of the contents.
+
+### Identity
+
+Git, ssh and GitHub CLI credentials are only mounted if the config lists them
+under `identity`, and only if they exist on the host. They are read-only, but
+read-only still means readable: anything running in the image can use your
+ssh keys or `gh` token. `bagworm enter --no-identity` drops them all for one
+run.
+
+## Everyday use
+
+The container shell reads stdin, so anything you would type you can pipe in.
+
+```sh
+$ bagworm enter
+node@workspace:/workspace$ npm run build
+node@workspace:/workspace$ exit
+$ ls -l dist/app.js
+-rw-r--r-- 1 you you 48210 Jul  4 14:12 dist/app.js
+```
+
+One command, or several:
+
+```sh
+$ bagworm enter <<< 'npm test'
+
+$ bagworm enter <<'EOF'
+npm ci
+npm run build
+npm test
+EOF
+```
+
+With `image: golang:1.25` you can run a Go project's tests on a machine with
+no Go installed:
+
+```sh
+$ bagworm enter <<< 'go test ./...'
+ok      example.com/yourproject/internal/thing   0.31s
+```
+
+In CI, `bagworm trust` approves the config in the checkout being tested:
+
+```yaml
+# .github/workflows/test.yml
+- run: bagworm trust && bagworm enter <<< 'make test'
+```
+
+## How it runs the container
+
+- It uses the first runtime it finds: podman, then docker, then nerdctl.
+- Rootless podman gets `--userns=keep-id`; docker and nerdctl get
+  `--user <uid>:<gid>` and a writable `HOME`. Either way, files you create
+  are owned by you.
+- `-t` is added only when stdout is a terminal, so piped input and CI work
+  without flags.
+- On an SELinux-enforcing host, workspace mounts get `:z`. Identity mounts
+  are never relabeled; you get a warning that SELinux may block them.
+- bagworm `exec`s the runtime, so signals, terminal resize and exit codes
+  come straight from it.
+
+## Not included
+
+- Raw runtime flags. There is no `--docker-args`; use docker directly.
+- Building images. Use `docker build` or `podman build` and name the result
+  in `image`.
+- Anything that doesn't remove a daily annoyance. "Docker can do X" is not a
+  reason for bagworm to do X.
 
 ## Known quirks (v0.1)
 
 - On docker/nerdctl your user doesn't exist in the image's `/etc/passwd`,
   so the prompt says `I have no name!`. Cosmetic; your files are still
   yours. Podman users don't see this.
-- Images with *no* shell at all fail with the runtime's own error message.
+- Images with no shell at all fail with the runtime's own error message.
   Acceptable: bagworm exists to put you in a shell.
 - Rootful podman is untested; v0.1 assumes rootless.
 
-## Development
-
-```sh
-go test ./...                             # unit tests, hermetic, no containers
-go test -tags integration ./internal/enter/  # needs a real runtime
-```
-
-Hooks (gofmt/vet/test + Conventional Commits) install via `npm install`
-(lefthook). Changelog is generated with `npm run changelog` (git-cliff).
-
 ## License
 
-MIT - see [LICENSE](./LICENSE).
-
----
+MIT, see [LICENSE](./LICENSE).
 
 Attribution for the metal can in the logo:
 <a href="https://www.vecteezy.com/free-png/aluminum-can">Aluminum Can PNGs by Vecteezy</a>
